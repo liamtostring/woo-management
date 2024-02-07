@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: WooCommerce Order Management
-Description: Display recent WooCommerce orders and allow editing and printing of billing and shipping details.
+Description: Display recent WooCommerce orders and allow printing of order details.
 Version: 1.0
 Author: Your Name
 */
@@ -34,7 +34,7 @@ function display_order_management_page() {
         echo '<table class="widefat">';
         echo '<thead>';
         echo '<tr>';
-        echo '<th>Order ID</th>';
+        echo '<th>Order Number</th>';
         echo '<th>Date</th>';
         echo '<th>Total</th>';
         echo '<th>Actions</th>';
@@ -43,17 +43,16 @@ function display_order_management_page() {
         echo '<tbody>';
 
         foreach ($orders as $order) {
-            $order_id = $order->get_id();
+            $order_number = $order->get_order_number();
             $order_date = $order->get_date_created();
             $order_total = wc_price($order->get_total());
 
             echo '<tr>';
-            echo '<td>' . $order_id . '</td>';
+            echo '<td>' . $order_number . '</td>';
             echo '<td>' . $order_date->date_i18n('F j, Y H:i:s') . '</td>';
             echo '<td>' . $order_total . '</td>';
             echo '<td>';
-            echo '<a href="' . admin_url('post.php?post=' . $order_id . '&action=edit') . '">Edit</a> | ';
-            echo '<a href="#" class="print-order" data-order-id="' . $order_id . '">Print</a>';
+            echo '<a href="#" class="print-order" data-order-id="' . $order->get_id() . '">Print</a>';
             echo '</td>';
             echo '</tr>';
         }
@@ -64,20 +63,17 @@ function display_order_management_page() {
         echo '<p>No recent orders found.</p>';
     }
 
-    // Inline CSS for demonstration
-    echo '<style>';
-    echo '.widefat { width: 100%; margin-top: 20px; }';
-    echo 'table.widefat thead th { background-color: #f0f0f0; }';
-    echo 'table.widefat tbody tr:nth-child(odd) { background-color: #f9f9f9; }';
-    echo '</style>';
-
-    // Inline JavaScript for demonstration
+    // Inline JavaScript for printing functionality
     echo '<script>';
     echo 'jQuery(document).ready(function($) {';
     echo '    $(".print-order").on("click", function(e) {';
     echo '        e.preventDefault();';
     echo '        var orderId = $(this).data("order-id");';
-    echo '        // Add your code here to handle printing of order details';
+    echo '        var printUrl = "' . admin_url('admin-ajax.php?action=print_order_details&order_id=') . '" + orderId;';
+    echo '        var printWindow = window.open(printUrl, "_blank");';
+    echo '        printWindow.onload = function() {';
+    echo '            printWindow.print();';
+    echo '        };';
     echo '    });';
     echo '});';
     echo '</script>';
@@ -85,9 +81,58 @@ function display_order_management_page() {
     echo '</div>';
 }
 
-// Hook into WordPress to enqueue CSS and JavaScript files
-function enqueue_order_management_scripts() {
-    // This function is left empty as we are using inline CSS and JavaScript
+// Add an AJAX action for printing order details
+add_action('wp_ajax_print_order_details', 'print_order_details_callback');
+add_action('wp_ajax_nopriv_print_order_details', 'print_order_details_callback');
+
+// Callback function to handle printing order details
+function print_order_details_callback() {
+    if (isset($_GET['order_id'])) {
+        $order_id = intval($_GET['order_id']);
+        $order = wc_get_order($order_id);
+
+        if ($order) {
+            // Get the order number
+            $order_number = $order->get_order_number();
+
+            // Get billing information
+            $billing_info = $order->get_address('billing');
+
+            // Get custom fields under shipping
+            $shipping_fields = array(
+                'shipping_birlos' => $order->get_meta('shipping_birlos', true),
+                'shipping_notaverde' => $order->get_meta('shipping_notaverde', true),
+                'shipping_marca' => $order->get_meta('shipping_marca', true),
+                'shipping_ano' => $order->get_meta('shipping_ano', true),
+                'shipping_placas' => $order->get_meta('shipping_placas', true),
+                'shipping_trabajo' => $order->get_meta('shipping_trabajo', true),
+                'shipping_fechaentrega' => $order->get_meta('shipping_fechaentrega', true),
+                'shipping_formapago' => $order->get_meta('shipping_formapago', true),
+            );
+
+            // Create a readable output
+            $output = "Order Number: $order_number\n\n";
+            $output .= "Billing Information:\n";
+            foreach ($billing_info as $key => $value) {
+                $output .= ucfirst(str_replace('_', ' ', $key)) . ": $value\n";
+            }
+            $output .= "\nShipping Custom Fields:\n";
+            foreach ($shipping_fields as $key => $value) {
+                $output .= ucfirst(str_replace('_', ' ', $key)) . ": $value\n";
+            }
+
+            // Output the readable format for printing
+            header('Content-Type: text/plain');
+            echo $output;
+            exit;
+        } else {
+            echo 'Order not found.';
+        }
+    } else {
+        echo 'Order ID not provided.';
+    }
+
+    wp_die();
 }
-add_action('admin_enqueue_scripts', 'enqueue_order_management_scripts');
+
 ?>
